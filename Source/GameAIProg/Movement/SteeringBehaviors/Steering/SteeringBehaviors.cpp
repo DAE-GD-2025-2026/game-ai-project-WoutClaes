@@ -134,5 +134,23 @@ SteeringOutput Wander::CalculateSteering(float DeltaT, ASteeringAgent& Agent)
 {
 	SteeringOutput steering{};
 	
+	float t = (float)rand() / (float)RAND_MAX; // 0–1
+	float randomChange = (t * 2.0f - 1.0f) * m_MaxAngleChange;
+	m_WanderAngle += randomChange;
+
+	FVector forward3D = Agent.GetActorForwardVector();
+	FVector2D forward(forward3D.X, forward3D.Y);
+
+	FVector2D circleCenter = Agent.GetPosition() + forward * m_OffsetDistance;
+	
+	FVector2D offset;
+	offset.X = cos(m_WanderAngle) * m_Radius;
+	offset.Y = sin(m_WanderAngle) * m_Radius;
+
+	FVector2D wanderTarget = circleCenter + offset;
+
+	steering.LinearVelocity = wanderTarget - Agent.GetPosition();
+	steering.AngularVelocity = 0.f;
+
 	return steering;
 }
