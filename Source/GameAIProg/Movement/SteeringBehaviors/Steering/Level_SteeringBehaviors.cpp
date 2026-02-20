@@ -115,7 +115,8 @@ void ALevel_SteeringBehaviors::Tick(float DeltaTime)
 			ImGui::PushItemWidth(100);
 
 			// Add the names of your steering behaviors
-			if (ImGui::Combo("", &a.SelectedBehavior, "Seek\0Wander\0Flee\0Arrive\0Evade\0Pursuit", 4))
+			if (ImGui::Combo("", &a.SelectedBehavior, 
+				"Seek\0Wander\0Flee\0Arrive\0Evade\0Pursuit\0Face", 7))
 			{
 				bBehaviourModified = true;
 			}
@@ -165,6 +166,11 @@ void ALevel_SteeringBehaviors::Tick(float DeltaTime)
 				a.Agent->SetDebugRenderingEnabled(isChecked);
 			}
 
+			if (a.Behavior)
+			{
+				ImGui::TextColored(ImVec4(1.f, 1.f, 0.f, 1.f), "Active: %s", a.Behavior->GetName());
+			}
+			
 			ImGui::Unindent();
 		}
 #pragma endregion 

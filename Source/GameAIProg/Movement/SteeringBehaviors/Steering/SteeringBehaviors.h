@@ -25,6 +25,8 @@ public:
 	template<class T, std::enable_if_t<std::is_base_of_v<ISteeringBehavior, T>>* = nullptr>
 	T* As()
 	{ return static_cast<T*>(this); }
+	
+	virtual const char* GetName() const = 0;
 
 protected:
 	FTargetData Target;
@@ -39,9 +41,12 @@ class Seek : public ISteeringBehavior
 public:
 	Seek() = default;
 	virtual ~Seek() override = default;
-
+	
 	// steering
 	virtual SteeringOutput CalculateSteering(float DeltaT, ASteeringAgent& Agent) override;
+	
+	// debug rendering
+	virtual const char* GetName() const override { return "Seek"; }
 };
 
 //----------
@@ -53,8 +58,13 @@ public:
 	Flee() = default;
 	virtual ~Flee() override = default;
 
+	
+	
 	// steering
 	virtual SteeringOutput CalculateSteering(float DeltaT, ASteeringAgent& Agent) override;
+	
+	// debug rendering
+	virtual const char* GetName() const override { return "Flee"; }
 };
 
 //----------
@@ -68,6 +78,9 @@ public:
 	
 	// steering
 	virtual SteeringOutput CalculateSteering(float DeltaT, ASteeringAgent& Agent) override;
+	
+	// debug rendering
+	virtual const char* GetName() const override { return "Arrive"; }
 	
 private:
 	float slowRadius {1000.f};
@@ -85,6 +98,9 @@ public:
 	
 	// steering
 	virtual SteeringOutput CalculateSteering(float DeltaT, ASteeringAgent& Agent) override;
+	
+	// debug rendering
+	virtual const char* GetName() const override { return "Face"; }
 };
 
 //----------
@@ -98,6 +114,9 @@ public:
 	
 	// steering
 	virtual SteeringOutput CalculateSteering(float DeltaT, ASteeringAgent& Agent) override;
+	
+	// debug rendering
+	virtual const char* GetName() const override { return "Pursuit"; }
 };
 
 //----------
@@ -111,6 +130,9 @@ public:
 	
 	// steering
 	virtual SteeringOutput CalculateSteering(float DeltaT, ASteeringAgent& Agent) override;
+	
+	// debug rendering
+	virtual const char* GetName() const override { return "Evade"; }
 };
 
 //----------
@@ -124,6 +146,9 @@ public:
 	
 	// steering
 	virtual SteeringOutput CalculateSteering(float DeltaT, ASteeringAgent& Agent) override;
+	
+	// debug rendering
+	virtual const char* GetName() const override { return "Wander"; }
 	
 	void SetWanderOffset(const float offset) {m_OffsetDistance = offset;};
 	void SetWanderRadius(const float radius) {m_Radius = radius;};
