@@ -11,6 +11,7 @@ public:
 
 	//Cohesion Behavior
 	SteeringOutput CalculateSteering(float deltaT, ASteeringAgent& pAgent) override;
+	virtual const char* GetName() const override { return "Cohesion"; }
 
 private:
 	Flock* pFlock = nullptr;
@@ -18,6 +19,28 @@ private:
 
 //SEPARATION - FLOCKING
 //*********************
+class Separation final : public ISteeringBehavior
+{
+public:
+	Separation(Flock* const pFlock) : pFlock(pFlock) {};
+	
+	SteeringOutput CalculateSteering(float deltaT, ASteeringAgent& pAgent) override;
+	virtual const char* GetName() const override { return "Separation"; }
+	
+private:
+	Flock* pFlock = nullptr;
+};
 
 //VELOCITY MATCH - FLOCKING
 //************************
+class VelocityMatch final : public ISteeringBehavior
+{
+public:
+	VelocityMatch(Flock* const pFlock) : pFlock(pFlock) {};
+	
+	SteeringOutput CalculateSteering(float deltaT, ASteeringAgent& pAgent) override;
+	virtual const char* GetName() const override { return "VelocityMatch"; }
+	
+private:
+	Flock* pFlock = nullptr;
+};
