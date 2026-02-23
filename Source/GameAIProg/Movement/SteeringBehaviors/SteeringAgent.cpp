@@ -27,7 +27,7 @@ void ASteeringAgent::BeginDestroy()
 void ASteeringAgent::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
+	
 	SteeringOutput output = SteeringBehavior->CalculateSteering(DeltaTime, *this);
 	if (output.IsValid)
 	{
@@ -40,11 +40,10 @@ void ASteeringAgent::Tick(float DeltaTime)
 				float const DeltaYaw = FMath::Clamp(output.AngularVelocity, -1.f, 1.f)
 				* GetMaxAngularSpeed() * DeltaTime;
 				
-				FRotator const CurrentRotation{GetActorForwardVector().ToOrientationRotator()};
+				FRotator const CurrentRotation = GetActorRotation();
 				FRotator const DeltaRotation{0, DeltaYaw, 0};
-				FRotator const DesiredRotation{CurrentRotation + DeltaRotation};
-				
-				// We only care about yaw
+				FRotator const DesiredRotation = CurrentRotation + DeltaRotation;
+
 				if (!FMath::IsNearlyEqual(CurrentRotation.Yaw, DesiredRotation.Yaw))
 				{
 					AIController->SetControlRotation(DesiredRotation);
@@ -64,5 +63,8 @@ void ASteeringAgent::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 void ASteeringAgent::SetSteeringBehavior(ISteeringBehavior* NewSteeringBehavior)
 {
 	SteeringBehavior = NewSteeringBehavior;
-}
 
+	bool bIsManualRotation = NewSteeringBehavior && NewSteeringBehavior->UsesManualRotation();
+	GetCharacterMovement()->bOrientRotationToMovement = !bIsManualRotation;
+	bUseControllerRotationYaw = bIsManualRotation;
+}

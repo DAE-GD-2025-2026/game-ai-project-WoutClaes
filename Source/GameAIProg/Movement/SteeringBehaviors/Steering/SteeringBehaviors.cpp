@@ -104,10 +104,7 @@ SteeringOutput Face::CalculateSteering(float DeltaT, ASteeringAgent& Agent)
 	float currentAngle = Agent.GetRotation();
 	float angleDifference = desiredAngle - currentAngle;
 
-	while (angleDifference > 180.f)  angleDifference -= 360.f;
-	while (angleDifference < -180.f) angleDifference += 360.f;
-
-	steering.AngularVelocity = FMath::Clamp(angleDifference / 180.f, -1.f, 1.f);
+	steering.AngularVelocity = angleDifference / 180.f;
 
 	if (Agent.GetDebugRenderingEnabled())
 	{

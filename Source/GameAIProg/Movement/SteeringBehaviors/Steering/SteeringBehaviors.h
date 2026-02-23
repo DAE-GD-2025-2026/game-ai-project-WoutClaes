@@ -21,6 +21,7 @@ public:
 	virtual SteeringOutput CalculateSteering(float DeltaT, ASteeringAgent & Agent) = 0;
 
 	void SetTarget(const FTargetData& NewTarget) { Target = NewTarget; }
+	virtual bool UsesManualRotation() const { return false; }
 	
 	template<class T, std::enable_if_t<std::is_base_of_v<ISteeringBehavior, T>>* = nullptr>
 	T* As()
@@ -101,6 +102,8 @@ public:
 	
 	// debug rendering
 	virtual const char* GetName() const override { return "Face"; }
+	
+	virtual bool UsesManualRotation() const override { return true; }
 };
 
 //----------
