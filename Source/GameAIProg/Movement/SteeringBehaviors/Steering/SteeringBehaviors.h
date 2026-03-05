@@ -76,6 +76,8 @@ class Arrive : public ISteeringBehavior
 public:
 	Arrive() = default;
 	virtual ~Arrive() override = default;
+
+	void SetTargetRadius(float target){ targetRadius = target; }
 	
 	// steering
 	virtual SteeringOutput CalculateSteering(float DeltaT, ASteeringAgent& Agent) override;

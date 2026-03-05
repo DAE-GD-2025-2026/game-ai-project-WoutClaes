@@ -1,7 +1,7 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "GameAISpectator.h"
+#include "Shared/GameAISpectator.h"
 
 #include "GameAISpectatorController.h"
 #include "Camera/CameraComponent.h"
@@ -50,5 +50,10 @@ void AGameAISpectator::UnPossessed()
 void AGameAISpectator::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+}
+
+void AGameAISpectator::SetCameraProjection(ECameraProjectionMode::Type ProjectionMode)
+{
+	Camera->SetProjectionMode(ProjectionMode);
 }
 
