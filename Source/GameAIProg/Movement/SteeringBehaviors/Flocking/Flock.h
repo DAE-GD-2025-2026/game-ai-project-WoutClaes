@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 // Toggle this define to enable/disable spatial partitioning
-// #define GAMEAI_USE_SPACE_PARTITIONING
+#define GAMEAI_USE_SPACE_PARTITIONING
 
 #include "FlockingSteeringBehaviors.h"
 #include "Movement/SteeringBehaviors/SteeringAgent.h"
@@ -50,34 +50,35 @@ private:
 	
 	int FlockSize{0};
 	TArray<ASteeringAgent*> Agents{};
+
 #ifdef GAMEAI_USE_SPACE_PARTITIONING
 	std::unique_ptr<CellSpace> pPartitionedSpace{};
-	int NrOfCellsX{ 10 };
+	int NrOfCellsX{25};
 	TArray<FVector2D> OldPositions{};
 #else // No space partitioning
 	TArray<ASteeringAgent*> Neighbors{};
 #endif // USE_SPACE_PARTITIONING
-	
+
 	float NeighborhoodRadius{200.f};
 	int NrOfNeighbors{0};
 
 	ASteeringAgent* pAgentToEvade{nullptr};
 	
-	//Steering Behaviors
-	std::unique_ptr<Separation> pSeparationBehavior{};
-	std::unique_ptr<Cohesion> pCohesionBehavior{};
+	// Steering Behaviors
+	std::unique_ptr<Separation>    pSeparationBehavior{};
+	std::unique_ptr<Cohesion>      pCohesionBehavior{};
 	std::unique_ptr<VelocityMatch> pVelMatchBehavior{};
-	std::unique_ptr<Seek> pSeekBehavior{};
-	std::unique_ptr<Wander> pWanderBehavior{};
-	std::unique_ptr<Evade> pEvadeBehavior{};
+	std::unique_ptr<Seek>          pSeekBehavior{};
+	std::unique_ptr<Wander>        pWanderBehavior{};
+	std::unique_ptr<Evade>         pEvadeBehavior{};
 	
-	std::unique_ptr<BlendedSteering> pBlendedSteering{};
+	std::unique_ptr<BlendedSteering>  pBlendedSteering{};
 	std::unique_ptr<PrioritySteering> pPrioritySteering{};
 
 	// UI and rendering
 	bool DebugRenderSteering{false};
-	bool DebugRenderNeighborhood{true};
-	bool DebugRenderPartitions{true};
+	bool DebugRenderNeighborhood{false};
+	bool DebugRenderPartitions{false};
 
 	void RenderNeighborhood();
 };
