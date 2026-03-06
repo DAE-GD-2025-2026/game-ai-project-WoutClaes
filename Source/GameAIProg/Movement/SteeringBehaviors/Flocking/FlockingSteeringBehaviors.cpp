@@ -60,6 +60,11 @@ SteeringOutput Separation::CalculateSteering(float deltaT, ASteeringAgent& pAgen
 		}
 	}
 
+	if (!separationVelocity.IsNearlyZero())
+	{
+		separationVelocity = separationVelocity.GetSafeNormal() * pAgent.GetMaxLinearSpeed();
+	}
+
 	steering.LinearVelocity = separationVelocity;
 
 	// Debug: red line showing separation direction
