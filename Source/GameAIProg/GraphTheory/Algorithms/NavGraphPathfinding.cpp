@@ -13,7 +13,6 @@ std::vector<FVector2D> NavMeshPathfinding::FindPath(const FVector2D& startPos, c
 {
 	std::vector<FVector2D> finalPath{};
 
-	// --- Step A: find which triangles contain start and end ---
 	FVector2D startSnapped{};
 	FVector2D endSnapped{};
 	TriPolygon::Triangle const* pStartTri = pNavGraph->GetNavPolygon()->GetClosestTriangleToPosition(startPos, startSnapped);
@@ -22,7 +21,6 @@ std::vector<FVector2D> NavMeshPathfinding::FindPath(const FVector2D& startPos, c
 	if (!pStartTri || !pEndTri)
 		return finalPath;
 
-	// Same triangle: straight line
 	if (*pStartTri == *pEndTri)
 	{
 		finalPath.push_back(startSnapped);
@@ -30,10 +28,8 @@ std::vector<FVector2D> NavMeshPathfinding::FindPath(const FVector2D& startPos, c
 		return finalPath;
 	}
 
-	// --- Step B: clone graph and add temporary start/end nodes ---
 	std::unique_ptr<NavGraph> pGraph = pNavGraph->Clone();
 
-	// Add start node (EdgeIdx = -1, not on any edge)
 	int startId = pGraph->AddNode(std::make_unique<NavGraphNode>(startSnapped, -1));
 	for (auto const& edge : pStartTri->GetEdges())
 	{
@@ -47,7 +43,6 @@ std::vector<FVector2D> NavMeshPathfinding::FindPath(const FVector2D& startPos, c
 		pGraph->AddConnection(std::move(c));
 	}
 
-	// Add end node (EdgeIdx = -1)
 	int endId = pGraph->AddNode(std::make_unique<NavGraphNode>(endSnapped, -1));
 	for (auto const& edge : pEndTri->GetEdges())
 	{
@@ -61,7 +56,6 @@ std::vector<FVector2D> NavMeshPathfinding::FindPath(const FVector2D& startPos, c
 		pGraph->AddConnection(std::move(c));
 	}
 
-	// --- Step C: run A* ---
 	AStar aStar(pGraph.get(), HeuristicFunctions::Euclidean);
 	std::vector<Node*> nodePath = aStar.FindPath(
 		pGraph->GetNode(startId).get(),
@@ -71,11 +65,9 @@ std::vector<FVector2D> NavMeshPathfinding::FindPath(const FVector2D& startPos, c
 	if (nodePath.empty())
 		return finalPath;
 
-	// Store raw A* positions for debug rendering
 	for (Node* pNode : nodePath)
 		debugNodePositions.push_back(pNode->GetPosition());
 
-	// Direct connection, no portals needed
 	if (nodePath.size() <= 2)
 	{
 		for (Node* pNode : nodePath)
@@ -83,19 +75,15 @@ std::vector<FVector2D> NavMeshPathfinding::FindPath(const FVector2D& startPos, c
 		return finalPath;
 	}
 
-	// --- Step D: smooth path with SSFA ---
-	// FindPortals builds the oriented portal list (no degenerate start)
 	std::vector<NavLine> rawPortals = SSFA::FindPortals(nodePath, *pNavGraph->GetNavPolygon());
 	debugPortals = rawPortals;
 
-	// Prepend degenerate start portal so OptimizePortals gets the correct apex
 	std::vector<NavLine> allPortals{};
 	allPortals.push_back({ startSnapped, startSnapped });
 	allPortals.insert(allPortals.end(), rawPortals.begin(), rawPortals.end());
 
 	finalPath = SSFA::OptimizePortals(allPortals, *pNavGraph->GetNavPolygon());
 
-	// Fallback to raw A* path if SSFA failed
 	if (finalPath.size() < 2)
 	{
 		finalPath.clear();
