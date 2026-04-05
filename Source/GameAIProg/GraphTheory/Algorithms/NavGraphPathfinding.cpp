@@ -9,92 +9,106 @@
 using namespace GameAI;
 
 std::vector<FVector2D> NavMeshPathfinding::FindPath(const FVector2D& startPos, const FVector2D& endPos,
-	NavGraph* const pNavGraph, std::vector<FVector2D>& debugNodePositions, std::vector<NavLine>& debugPortals) 
+	NavGraph* const pNavGraph, std::vector<FVector2D>& debugNodePositions, std::vector<NavLine>& debugPortals)
 {
 	std::vector<FVector2D> finalPath{};
 
+	// --- Step A: find which triangles contain start and end ---
 	FVector2D startSnapped{};
 	FVector2D endSnapped{};
-	TriPolygon::Triangle const* pStartTriangle = pNavGraph->GetNavPolygon()->GetClosestTriangleToPosition(startPos, startSnapped);
-	TriPolygon::Triangle const* pEndTriangle   = pNavGraph->GetNavPolygon()->GetClosestTriangleToPosition(endPos,   endSnapped);
- 
-	if (!pStartTriangle || !pEndTriangle)
+	TriPolygon::Triangle const* pStartTri = pNavGraph->GetNavPolygon()->GetClosestTriangleToPosition(startPos, startSnapped);
+	TriPolygon::Triangle const* pEndTri   = pNavGraph->GetNavPolygon()->GetClosestTriangleToPosition(endPos,   endSnapped);
+
+	if (!pStartTri || !pEndTri)
 		return finalPath;
- 
-	if (*pStartTriangle == *pEndTriangle)
+
+	// Same triangle: straight line
+	if (*pStartTri == *pEndTri)
 	{
 		finalPath.push_back(startSnapped);
 		finalPath.push_back(endSnapped);
 		return finalPath;
 	}
- 
-	std::unique_ptr<NavGraph> pClonedGraph = pNavGraph->Clone();
- 
-	NavGraphNode* pStartNode = new NavGraphNode(startSnapped, -1);
-	int startNodeId = pClonedGraph->AddNode(std::unique_ptr<Node>(pStartNode));
- 
-	for (auto const& edge : pStartTriangle->GetEdges())
+
+	// --- Step B: clone graph and add temporary start/end nodes ---
+	std::unique_ptr<NavGraph> pGraph = pNavGraph->Clone();
+
+	// Add start node (EdgeIdx = -1, not on any edge)
+	int startId = pGraph->AddNode(std::make_unique<NavGraphNode>(startSnapped, -1));
+	for (auto const& edge : pStartTri->GetEdges())
 	{
-		auto edgeIdxOpt = pNavGraph->GetNavPolygon()->FindEdgeIndex(edge);
-		if (!edgeIdxOpt.has_value()) continue;
- 
-		int neighborId = pClonedGraph->GetNodeIdFromEdgeIndex(edgeIdxOpt.value());
-		if (neighborId == Graphs::InvalidNodeId) continue;
- 
-		FVector2D neighborPos = pClonedGraph->GetNode(neighborId)->GetPosition();
-		float dist = FVector2D::Distance(startSnapped, neighborPos);
- 
-		auto pConn = std::make_unique<Connection>(startNodeId, neighborId);
-		pConn->SetWeight(dist);
-		pClonedGraph->AddConnection(std::move(pConn));
+		auto opt = pNavGraph->GetNavPolygon()->FindEdgeIndex(edge);
+		if (!opt) continue;
+		int nId = pGraph->GetNodeIdFromEdgeIndex(*opt);
+		if (nId == Graphs::InvalidNodeId) continue;
+		float dist = FVector2D::Distance(startSnapped, pGraph->GetNode(nId)->GetPosition());
+		auto c = std::make_unique<Connection>(startId, nId);
+		c->SetWeight(dist);
+		pGraph->AddConnection(std::move(c));
 	}
- 
-	NavGraphNode* pEndNode = new NavGraphNode(endSnapped, -1);
-	int endNodeId = pClonedGraph->AddNode(std::unique_ptr<Node>(pEndNode));
- 
-	for (auto const& edge : pEndTriangle->GetEdges())
+
+	// Add end node (EdgeIdx = -1)
+	int endId = pGraph->AddNode(std::make_unique<NavGraphNode>(endSnapped, -1));
+	for (auto const& edge : pEndTri->GetEdges())
 	{
-		auto edgeIdxOpt = pNavGraph->GetNavPolygon()->FindEdgeIndex(edge);
-		if (!edgeIdxOpt.has_value()) continue;
- 
-		int neighborId = pClonedGraph->GetNodeIdFromEdgeIndex(edgeIdxOpt.value());
-		if (neighborId == Graphs::InvalidNodeId) continue;
- 
-		FVector2D neighborPos = pClonedGraph->GetNode(neighborId)->GetPosition();
-		float dist = FVector2D::Distance(endSnapped, neighborPos);
- 
-		auto pConn = std::make_unique<Connection>(endNodeId, neighborId);
-		pConn->SetWeight(dist);
-		pClonedGraph->AddConnection(std::move(pConn));
+		auto opt = pNavGraph->GetNavPolygon()->FindEdgeIndex(edge);
+		if (!opt) continue;
+		int nId = pGraph->GetNodeIdFromEdgeIndex(*opt);
+		if (nId == Graphs::InvalidNodeId) continue;
+		float dist = FVector2D::Distance(endSnapped, pGraph->GetNode(nId)->GetPosition());
+		auto c = std::make_unique<Connection>(endId, nId);
+		c->SetWeight(dist);
+		pGraph->AddConnection(std::move(c));
 	}
- 
-	AStar aStar(pClonedGraph.get(), HeuristicFunctions::Euclidean);
+
+	// --- Step C: run A* ---
+	AStar aStar(pGraph.get(), HeuristicFunctions::Euclidean);
 	std::vector<Node*> nodePath = aStar.FindPath(
-		pClonedGraph->GetNode(startNodeId).get(),
-		pClonedGraph->GetNode(endNodeId).get()
+		pGraph->GetNode(startId).get(),
+		pGraph->GetNode(endId).get()
 	);
- 
+
 	if (nodePath.empty())
 		return finalPath;
- 
+
+	// Store raw A* positions for debug rendering
 	for (Node* pNode : nodePath)
 		debugNodePositions.push_back(pNode->GetPosition());
- 
-	for (Node* pNode : nodePath)
-		finalPath.push_back(pNode->GetPosition());
- 
-	// Extra: Run SSFA path smoother on the node path
-	// Uncomment once CreateNavigationGraph and basic pathfinding are verified working:
-	// debugPortals = SSFA::FindPortals(nodePath, *pNavGraph->GetNavPolygon());
-	// finalPath = SSFA::OptimizePortals(debugPortals, *pNavGraph->GetNavPolygon());
- 
+
+	// Direct connection, no portals needed
+	if (nodePath.size() <= 2)
+	{
+		for (Node* pNode : nodePath)
+			finalPath.push_back(pNode->GetPosition());
+		return finalPath;
+	}
+
+	// --- Step D: smooth path with SSFA ---
+	// FindPortals builds the oriented portal list (no degenerate start)
+	std::vector<NavLine> rawPortals = SSFA::FindPortals(nodePath, *pNavGraph->GetNavPolygon());
+	debugPortals = rawPortals;
+
+	// Prepend degenerate start portal so OptimizePortals gets the correct apex
+	std::vector<NavLine> allPortals{};
+	allPortals.push_back({ startSnapped, startSnapped });
+	allPortals.insert(allPortals.end(), rawPortals.begin(), rawPortals.end());
+
+	finalPath = SSFA::OptimizePortals(allPortals, *pNavGraph->GetNavPolygon());
+
+	// Fallback to raw A* path if SSFA failed
+	if (finalPath.size() < 2)
+	{
+		finalPath.clear();
+		for (Node* pNode : nodePath)
+			finalPath.push_back(pNode->GetPosition());
+	}
+
 	return finalPath;
 }
 
 std::vector<FVector2D> NavMeshPathfinding::FindPath(const FVector2D& startPos, const FVector2D& endPos, NavGraph* const pNavGraph)
 {
 	std::vector<FVector2D> debugNodePositions{};
-	std::vector<NavLine> debugPortals{};
-
+	std::vector<NavLine>   debugPortals{};
 	return FindPath(startPos, endPos, pNavGraph, debugNodePositions, debugPortals);
 }
