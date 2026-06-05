@@ -3,10 +3,8 @@
 #include "imgui.h"
 
 
-// Sets default values
 ALevel_CombinedSteering::ALevel_CombinedSteering()
 {
-	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 }
 
@@ -23,13 +21,16 @@ void ALevel_CombinedSteering::BeginPlay()
 	pPrey = GetWorld()->SpawnActor<ASteeringAgent>(SteeringAgentClass, FVector(0.f, 0.f, 90.f), FRotator::ZeroRotator, SpawnParams);
 	if (pPrey)
 	{
-		pPreyWander = std::make_unique<Wander>();
-		pPrey->SetSteeringBehavior(pPreyWander.get());
+		pPreyEvade = std::make_unique<Evade>();
+		pPrey->SetSteeringBehavior(pPreyEvade.get());
 	}
 
 	for (int i = 0; i < NrOfWolves; ++i)
 	{
-		FVector SpawnLoc(FMath::RandRange(-500.f, 500.f), FMath::RandRange(-500.f, 500.f), 90.f);
+		float SpawnRadius = FMath::RandRange(800.f, 1200.f);
+		float SpawnAngle = FMath::RandRange(0.f, 2.f * PI);
+		FVector SpawnLoc(cos(SpawnAngle) * SpawnRadius, sin(SpawnAngle) * SpawnRadius, 90.f);
+		
 		ASteeringAgent* NewWolf = GetWorld()->SpawnActor<ASteeringAgent>(SteeringAgentClass, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
 		
 		if (NewWolf)
@@ -41,7 +42,7 @@ void ALevel_CombinedSteering::BeginPlay()
 
 			std::vector<BlendedSteering::WeightedBehavior> behaviors = {
 				{ pursuit.get(), 0.8f },
-				{ flee.get(),    0.0f }
+				{ flee.get(),    0.0f } 
 			};
 
 			auto blend = std::make_unique<BlendedSteering>(behaviors);
@@ -60,21 +61,17 @@ void ALevel_CombinedSteering::BeginDestroy()
 
 }
 
-// Called every frame
 void ALevel_CombinedSteering::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	
 #pragma region UI
-	//UI
 	{
-		//Setup
 		bool windowActive = true;
 		ImGui::SetNextWindowPos(WindowPos);
 		ImGui::SetNextWindowSize(WindowSize);
 		ImGui::Begin("Game AI", &windowActive, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
 	
-		//Elements
 		ImGui::Text("CONTROLS");
 		ImGui::Indent();
 		ImGui::Text("LMB: place target");
@@ -104,7 +101,7 @@ void ALevel_CombinedSteering::Tick(float DeltaTime)
 	
 		if (ImGui::Checkbox("Debug Rendering", &CanDebugRender))
 		{
-   // TODO: Handle the debug rendering of your agents here :)
+			
 		}
 		ImGui::Checkbox("Trim World", &TrimWorld->bShouldTrimWorld);
 		if (TrimWorld->bShouldTrimWorld)
@@ -125,73 +122,95 @@ void ALevel_CombinedSteering::Tick(float DeltaTime)
 		
 #pragma endregion
 	
-		// --- WOLF PACK LOGIC ---
-	if (!pPrey) return;
+		if (!pPrey) return;
 
-	float EncircleRadius = 250.f;
-	float OrbitSpeed = 1.2f;
+		float ClosestWolfDist = 999999.f;
+		ASteeringAgent* ClosestWolfToPrey = nullptr;
 
-	FVector PreyForward3D = pPrey->GetActorForwardVector();
-	FVector2D PreyForward(PreyForward3D.X, PreyForward3D.Y);
-	if (PreyForward.IsNearlyZero()) PreyForward = FVector2D(1.f, 0.f);
-	PreyForward.Normalize();
-	
-	FVector2D PreyRight(-PreyForward.Y, PreyForward.X);
-
-	for (int i = 0; i < Wolves.Num(); ++i)
-	{
-		if (!Wolves[i]) continue;
-
-		Wolves[i]->SetDebugRenderingEnabled(CanDebugRender);
-
-		float BaseAngle = (2.f * PI / Wolves.Num()) * i;
-		float TimeAngle = GetWorld()->GetTimeSeconds() * OrbitSpeed;
-		float TotalAngle = BaseAngle + TimeAngle;
-
-		FVector2D LocalOffset(cos(TotalAngle) * EncircleRadius, sin(TotalAngle) * EncircleRadius);
-		
-		FVector2D WorldSlotOffset = (PreyForward * LocalOffset.X) + (PreyRight * LocalOffset.Y);
-
-		FTargetData PreyTarget;
-		PreyTarget.Position = pPrey->GetPosition() + WorldSlotOffset;
-		PreyTarget.LinearVelocity = pPrey->GetLinearVelocity();
-		
-		WolfPursuits[i]->SetTarget(PreyTarget);
-
-		float ClosestDist = 999999.f;
-		ASteeringAgent* ClosestWolf = nullptr;
-
-		for (int j = 0; j < Wolves.Num(); ++j)
+		for (int i = 0; i < Wolves.Num(); ++i)
 		{
-			if (i == j || !Wolves[j]) continue;
-
-			float Dist = FVector2D::Distance(Wolves[i]->GetPosition(), Wolves[j]->GetPosition());
-			if (Dist < ClosestDist)
+			if (!Wolves[i]) continue;
+			float Dist = FVector2D::Distance(pPrey->GetPosition(), Wolves[i]->GetPosition());
+			if (Dist < ClosestWolfDist)
 			{
-				ClosestDist = Dist;
-				ClosestWolf = Wolves[j];
+				ClosestWolfDist = Dist;
+				ClosestWolfToPrey = Wolves[i];
 			}
 		}
 
-		float* pFleeWeight = WolfBlends[i]->GetWeight(WolfFlees[i].get());
-		float* pPursuitWeight = WolfBlends[i]->GetWeight(WolfPursuits[i].get());
-
-		if (ClosestWolf && ClosestDist < 180.f) 
+		if (ClosestWolfToPrey)
 		{
-			FTargetData FleeTarget;
-			FleeTarget.Position = ClosestWolf->GetPosition();
-			WolfFlees[i]->SetTarget(FleeTarget);
-
-			if (pFleeWeight) *pFleeWeight = 0.4f; 
-			if (pPursuitWeight) *pPursuitWeight = 0.6f; 
+			FTargetData EvadeTarget;
+			EvadeTarget.Position = ClosestWolfToPrey->GetPosition();
+			EvadeTarget.LinearVelocity = ClosestWolfToPrey->GetLinearVelocity();
+			pPreyEvade->SetTarget(EvadeTarget);
 		}
-		else
+
+
+		float EncircleRadius = 250.f;
+		float OrbitSpeed = 1.2f;
+
+		FVector PreyForward3D = pPrey->GetActorForwardVector();
+		FVector2D PreyForward(PreyForward3D.X, PreyForward3D.Y);
+		if (PreyForward.IsNearlyZero()) PreyForward = FVector2D(1.f, 0.f);
+		PreyForward.Normalize();
+	
+		FVector2D PreyRight(-PreyForward.Y, PreyForward.X);
+
+		for (int i = 0; i < Wolves.Num(); ++i)
 		{
-			if (pFleeWeight) *pFleeWeight = 0.0f;
-			if (pPursuitWeight) *pPursuitWeight = 0.8f;
-		}
-	}
+			if (!Wolves[i]) continue;
 
-	pPrey->SetDebugRenderingEnabled(CanDebugRender);
+			Wolves[i]->SetDebugRenderingEnabled(CanDebugRender);
+
+			float BaseAngle = (2.f * PI / Wolves.Num()) * i;
+			float TimeAngle = GetWorld()->GetTimeSeconds() * OrbitSpeed;
+			float TotalAngle = BaseAngle + TimeAngle;
+
+			FVector2D LocalOffset(cos(TotalAngle) * EncircleRadius, sin(TotalAngle) * EncircleRadius);
+		
+			FVector2D WorldSlotOffset = (PreyForward * LocalOffset.X) + (PreyRight * LocalOffset.Y);
+
+			FTargetData PreyTarget;
+			PreyTarget.Position = pPrey->GetPosition() + WorldSlotOffset;
+			PreyTarget.LinearVelocity = pPrey->GetLinearVelocity(); 
+		
+			WolfPursuits[i]->SetTarget(PreyTarget);
+
+			float ClosestDist = 999999.f;
+			ASteeringAgent* ClosestWolf = nullptr;
+
+			for (int j = 0; j < Wolves.Num(); ++j)
+			{
+				if (i == j || !Wolves[j]) continue;
+
+				float Dist = FVector2D::Distance(Wolves[i]->GetPosition(), Wolves[j]->GetPosition());
+				if (Dist < ClosestDist)
+				{
+					ClosestDist = Dist;
+					ClosestWolf = Wolves[j];
+				}
+			}
+
+			float* pFleeWeight = WolfBlends[i]->GetWeight(WolfFlees[i].get());
+			float* pPursuitWeight = WolfBlends[i]->GetWeight(WolfPursuits[i].get());
+
+			if (ClosestWolf && ClosestDist < 180.f) 
+			{
+				FTargetData FleeTarget;
+				FleeTarget.Position = ClosestWolf->GetPosition();
+				WolfFlees[i]->SetTarget(FleeTarget);
+
+				if (pFleeWeight) *pFleeWeight = 0.4f; 
+				if (pPursuitWeight) *pPursuitWeight = 0.6f; 
+			}
+			else
+			{
+				if (pFleeWeight) *pFleeWeight = 0.0f;
+				if (pPursuitWeight) *pPursuitWeight = 0.8f;
+			}
+		}
+
+		pPrey->SetDebugRenderingEnabled(CanDebugRender);
 	}
 }

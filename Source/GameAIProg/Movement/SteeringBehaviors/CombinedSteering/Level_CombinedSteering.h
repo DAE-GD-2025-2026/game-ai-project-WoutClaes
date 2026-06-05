@@ -39,8 +39,7 @@ private:
 	ASteeringAgent* pPrey = nullptr;
 	TArray<ASteeringAgent*> Wolves;
 
-	// Prey Behavior
-	std::unique_ptr<Wander> pPreyWander;
+	std::unique_ptr<Evade> pPreyEvade;
 
 	// Wolf Behaviors (One set per wolf so they act independently)
 	TArray<std::unique_ptr<Pursuit>> WolfPursuits;
