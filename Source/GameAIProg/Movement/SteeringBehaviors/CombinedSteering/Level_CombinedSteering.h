@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "CoreMinimal.h"
 #include "CombinedSteeringBehaviors.h"
 #include "GameAIProg/Shared/Level_Base.h"
@@ -28,9 +30,20 @@ protected:
 	virtual void BeginDestroy() override;
 
 private:
-	//Datamembers
+	// Datamembers
 	bool UseMouseTarget = false;
 	bool CanDebugRender = false;
 
-	
+	// --- WOLF PACK VARIABLES ---
+	int NrOfWolves = 5;
+	ASteeringAgent* pPrey = nullptr;
+	TArray<ASteeringAgent*> Wolves;
+
+	// Prey Behavior
+	std::unique_ptr<Wander> pPreyWander;
+
+	// Wolf Behaviors (One set per wolf so they act independently)
+	TArray<std::unique_ptr<Pursuit>> WolfPursuits;
+	TArray<std::unique_ptr<Flee>> WolfFlees;
+	TArray<std::unique_ptr<BlendedSteering>> WolfBlends;
 };

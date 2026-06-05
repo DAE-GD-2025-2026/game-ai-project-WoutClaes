@@ -10,11 +10,48 @@ ALevel_CombinedSteering::ALevel_CombinedSteering()
 	PrimaryActorTick.bCanEverTick = true;
 }
 
-// Called when the game starts or when spawned
 void ALevel_CombinedSteering::BeginPlay()
 {
 	Super::BeginPlay();
 
+	TrimWorld->SetTrimWorldSize(2000.f);
+	TrimWorld->bShouldTrimWorld = true;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	pPrey = GetWorld()->SpawnActor<ASteeringAgent>(SteeringAgentClass, FVector(0.f, 0.f, 90.f), FRotator::ZeroRotator, SpawnParams);
+	if (pPrey)
+	{
+		pPreyWander = std::make_unique<Wander>();
+		pPrey->SetSteeringBehavior(pPreyWander.get());
+	}
+
+	for (int i = 0; i < NrOfWolves; ++i)
+	{
+		FVector SpawnLoc(FMath::RandRange(-500.f, 500.f), FMath::RandRange(-500.f, 500.f), 90.f);
+		ASteeringAgent* NewWolf = GetWorld()->SpawnActor<ASteeringAgent>(SteeringAgentClass, SpawnLoc, FRotator::ZeroRotator, SpawnParams);
+		
+		if (NewWolf)
+		{
+			Wolves.Add(NewWolf);
+
+			auto pursuit = std::make_unique<Pursuit>();
+			auto flee = std::make_unique<Flee>();
+
+			std::vector<BlendedSteering::WeightedBehavior> behaviors = {
+				{ pursuit.get(), 0.8f },
+				{ flee.get(),    0.0f }
+			};
+
+			auto blend = std::make_unique<BlendedSteering>(behaviors);
+			NewWolf->SetSteeringBehavior(blend.get());
+
+			WolfPursuits.Add(std::move(pursuit));
+			WolfFlees.Add(std::move(flee));
+			WolfBlends.Add(std::move(blend));
+		}
+	}
 }
 
 void ALevel_CombinedSteering::BeginDestroy()
@@ -83,22 +120,78 @@ void ALevel_CombinedSteering::Tick(float DeltaTime)
 	
 		ImGui::Text("Behavior Weights");
 		ImGui::Spacing();
-
-
-		// ImGuiHelpers::ImGuiSliderFloatWithSetter("Seek",
-		// 	pBlendedSteering->GetWeightedBehaviorsRef()[0].Weight, 0.f, 1.f,
-		// 	[this](float InVal) { pBlendedSteering->GetWeightedBehaviorsRef()[0].Weight = InVal; }, "%.2f");
-		//
-		// ImGuiHelpers::ImGuiSliderFloatWithSetter("Wander",
-		// pBlendedSteering->GetWeightedBehaviorsRef()[1].Weight, 0.f, 1.f,
-		// [this](float InVal) { pBlendedSteering->GetWeightedBehaviorsRef()[1].Weight = InVal; }, "%.2f");
-	
-		//End
+		
 		ImGui::End();
-	}
+		
 #pragma endregion
 	
-	// Combined Steering Update
- // TODO: implement handling mouse click input for seek
- // TODO: implement Make sure to also evade the wanderer
+		// --- WOLF PACK LOGIC ---
+	if (!pPrey) return;
+
+	float EncircleRadius = 250.f;
+	float OrbitSpeed = 1.2f;
+
+	FVector PreyForward3D = pPrey->GetActorForwardVector();
+	FVector2D PreyForward(PreyForward3D.X, PreyForward3D.Y);
+	if (PreyForward.IsNearlyZero()) PreyForward = FVector2D(1.f, 0.f);
+	PreyForward.Normalize();
+	
+	FVector2D PreyRight(-PreyForward.Y, PreyForward.X);
+
+	for (int i = 0; i < Wolves.Num(); ++i)
+	{
+		if (!Wolves[i]) continue;
+
+		Wolves[i]->SetDebugRenderingEnabled(CanDebugRender);
+
+		float BaseAngle = (2.f * PI / Wolves.Num()) * i;
+		float TimeAngle = GetWorld()->GetTimeSeconds() * OrbitSpeed;
+		float TotalAngle = BaseAngle + TimeAngle;
+
+		FVector2D LocalOffset(cos(TotalAngle) * EncircleRadius, sin(TotalAngle) * EncircleRadius);
+		
+		FVector2D WorldSlotOffset = (PreyForward * LocalOffset.X) + (PreyRight * LocalOffset.Y);
+
+		FTargetData PreyTarget;
+		PreyTarget.Position = pPrey->GetPosition() + WorldSlotOffset;
+		PreyTarget.LinearVelocity = pPrey->GetLinearVelocity();
+		
+		WolfPursuits[i]->SetTarget(PreyTarget);
+
+		float ClosestDist = 999999.f;
+		ASteeringAgent* ClosestWolf = nullptr;
+
+		for (int j = 0; j < Wolves.Num(); ++j)
+		{
+			if (i == j || !Wolves[j]) continue;
+
+			float Dist = FVector2D::Distance(Wolves[i]->GetPosition(), Wolves[j]->GetPosition());
+			if (Dist < ClosestDist)
+			{
+				ClosestDist = Dist;
+				ClosestWolf = Wolves[j];
+			}
+		}
+
+		float* pFleeWeight = WolfBlends[i]->GetWeight(WolfFlees[i].get());
+		float* pPursuitWeight = WolfBlends[i]->GetWeight(WolfPursuits[i].get());
+
+		if (ClosestWolf && ClosestDist < 180.f) 
+		{
+			FTargetData FleeTarget;
+			FleeTarget.Position = ClosestWolf->GetPosition();
+			WolfFlees[i]->SetTarget(FleeTarget);
+
+			if (pFleeWeight) *pFleeWeight = 0.4f; 
+			if (pPursuitWeight) *pPursuitWeight = 0.6f; 
+		}
+		else
+		{
+			if (pFleeWeight) *pFleeWeight = 0.0f;
+			if (pPursuitWeight) *pPursuitWeight = 0.8f;
+		}
+	}
+
+	pPrey->SetDebugRenderingEnabled(CanDebugRender);
+	}
 }
