@@ -35,3 +35,7 @@ The following debug visualizations are available via the ImGui panel at runtime:
 - **Debug Steering** — draws steering vectors per agent
 - **Debug Neighborhood** — draws the neighborhood radius circle and highlights neighbors of the first agent in yellow; when partitioning is enabled, also draws the query bounding box in green
 - **Debug Partitions** *(partitioning only)* — draws the full cell grid in blue with agent counts displayed per occupied cell
+
+## Extra assignement
+
+For the extra assignment, I implemented a wolfpack-style hunting behavior. Five agents function as coordinated hunters, each steering toward the prey while maintaining separation to avoid clustering. The prey agent uses an Evade behavior to dynamically flee from the closest wolf, resulting in a small but convincing predator-prey interaction.
